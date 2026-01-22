@@ -1,0 +1,8 @@
+# .dockerignore
+node_modules
+dist
+coverage
+.git
+.nx
+tmp
+**/*.log

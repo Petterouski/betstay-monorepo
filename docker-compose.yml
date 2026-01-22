@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # 1. API Gateway (Node/NestJS)
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./apps/api-gateway/Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - redis
+    networks:
+      - betstay-net
+
+  # 2. Betting Engine (Python)
+  betting-engine:
+    build:
+      context: .
+      dockerfile: ./apps/betting-engine/Dockerfile
+    ports:
+      - "3006:8000"  # <--- MAGIA: Mapeamos 3006 (Externo) a 8000 (Interno)
+    volumes:
+      - ./apps/betting-engine:/app/apps/betting-engine # Hot-Reload
+    networks:
+      - betstay-net
+
+  # 3. Booking Engine (Go)
+  booking-engine:
+    build:
+      context: .
+      dockerfile: ./apps/booking-engine/Dockerfile
+    ports:
+      - "3003:3003"
+    networks:
+      - betstay-net
+
+  # 4. Redis (Base de datos caché)
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - betstay-net
+
+networks:
+  betstay-net:
+    driver: bridge
