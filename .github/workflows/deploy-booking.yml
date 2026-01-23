@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/booking-engine
+  IMAGE_NAME: petterouski/betstay-monorepo/booking-engine
 
 jobs:
   build-and-push:
