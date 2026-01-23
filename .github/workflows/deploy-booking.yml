@@ -1,0 +1,83 @@
+name: Deploy Booking Domain
+
+on:
+  push:
+    branches: [ "develop" ] # Por ahora solo escuchamos develop
+    paths:
+      - 'apps/booking-engine/**'
+      - '.github/workflows/deploy-booking.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/booking-engine
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/booking-engine/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: QA  # Forzamos que use el entorno QA siempre por ahora
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }} # RECUERDA CREAR ESTE SECRETO GLOBAL
+          USERNAME: ${{ github.actor }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG: ${{ github.sha }} # Usamos el SHA del commit como tag
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GHCR_PAT,USERNAME,IMAGE,TAG
+          script: |
+            # Login
+            echo $GHCR_PAT | docker login ghcr.io -u $USERNAME --password-stdin
+            
+            # Pull de la imagen especifica de este commit
+            docker pull $IMAGE:sha-$TAG
+            
+            # Crear red
+            docker network create betstay-net || true
+            
+            # DB (Walking Skeleton: simple run)
+            docker run -d --name mysql-booking --network betstay-net --restart unless-stopped -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=booking_db -p 3306:3306 mysql:8.0 || true
+            
+            # App
+            docker stop booking-engine || true
+            docker rm booking-engine || true
+            docker run -d --name booking-engine --network betstay-net --restart always -p 3003:3003 -e DB_HOST=mysql-booking -e DB_PORT=3306 -e DB_USER=root -e DB_PASSWORD=root -e DB_NAME=booking_db $IMAGE:sha-$TAG
