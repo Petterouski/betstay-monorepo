@@ -1,24 +1,36 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"log"
 	"net/http"
 )
 
+// Esta es la función que responde cuando alguien entra a la página
+func healthCheck(w http.ResponseWriter, r *http.Request) {
+	// Le decimos al navegador/Gateway que le vamos a enviar JSON
+	w.Header().Set("Content-Type", "application/json")
+
+	// Creamos la respuesta
+	response := map[string]string{
+		"service": "Booking Engine (Go)",
+		"status":  "active",
+		"data":    "Ready for bookings",
+	}
+
+	// Enviamos la respuesta codificada
+	json.NewEncoder(w).Encode(response)
+}
+
 func main() {
-	// Definimos una ruta básica
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "¡NUEVOOOO Booking Engine (Go) está vivo y escuchando! 🐹")
-	})
+	// Definimos que cuando entren a la raíz "/", se ejecute la función healthCheck
+	http.HandleFunc("/", healthCheck)
 
-	// El puerto debe coincidir con el EXPOSE del Dockerfile (3003)
-	port := ":3003"
-	fmt.Println("Server starting on port", port)
+	// Imprimimos en consola para saber que arrancó
+	log.Println("🚀 Booking Engine corriendo en el puerto 3003...")
 
-	// Iniciamos el servidor (esto bloquea el proceso para que no muera)
-	err := http.ListenAndServe(port, nil)
-	if err != nil {
-		log.Fatal("Error starting server: ", err)
+	// Arrancamos el servidor en el puerto 3003 (Crítico: debe coincidir con tu Docker)
+	if err := http.ListenAndServe(":3003", nil); err != nil {
+		log.Fatal(err)
 	}
 }
