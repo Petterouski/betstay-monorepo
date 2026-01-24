@@ -5,8 +5,15 @@ import { AppService } from './app.service';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  @Get()
+  // Cuando entres a http://IP:3000/status, se ejecuta esto:
+  @Get('status')
   getData() {
-    return this.appService.getData();
+    return this.appService.getSystemStatus();
+  }
+  
+  // Dejamos la ruta raíz también por si acaso
+  @Get()
+  getRoot() {
+    return { message: 'Bienvenido a BetStay API Gateway' };
   }
 }
