@@ -29,24 +29,27 @@
 # Etapa 1: Build
 FROM node:18-alpine AS builder
 WORKDIR /app
-# Copiamos configs de dependencias
 COPY package*.json ./
-# Instalar dependencias (incluyendo devDependencies para poder compilar Nest)
+# Instalamos dependencias (incluyendo devDependencies para compilar)
 RUN npm install
-# Copiamos todo el código
 COPY . .
-# Construimos (Asumiendo que es un monorepo Nx, ajusta el comando si es necesario)
-# Si es Nx puro:
+# Construimos
 RUN npx nx build api-gateway --configuration=production
 
-# Etapa 2: Runner (Imagen ligera)
+# --- SECCIÓN DE DEBUG (SHERLOCK HOLMES) ---
+# Esto imprimirá en el log de GitHub qué carpetas se crearon realmente
+RUN echo "============== CHISMEANDO LA CARPETA DIST ==============" && \
+    ls -R /app/dist && \
+    echo "========================================================"
+
+# Etapa 2: Runner
 FROM node:18-alpine
 WORKDIR /app
 COPY package*.json ./
-# Solo dependencias de producción
 RUN npm install --only=production
-# Copiamos el build desde la etapa anterior
-# OJO: La ruta del build en Nx suele ser dist/apps/api-gateway
+
+# --- INTENTO DE COPY (Si falla, miraremos el log de arriba) ---
+# Dejo la ruta original, pero si falla, ya sabremos por qué gracias al 'ls' de arriba
 COPY --from=builder /app/dist/apps/api-gateway ./dist
 
 EXPOSE 3000
