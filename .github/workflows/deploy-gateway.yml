@@ -1,0 +1,98 @@
+name: Deploy API Gateway
+
+on:
+  push:
+    branches: [ "develop" ]
+    paths:
+      - 'apps/api-gateway/**'
+      - '.github/workflows/deploy-gateway.yml'
+
+env:
+  REGISTRY: ghcr.io
+  # TODO EN MINÚSCULAS
+  IMAGE_NAME: petterouski/betstay-monorepo/api-gateway
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/api-gateway/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: QA
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          USERNAME: ${{ github.actor }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG: ${{ github.sha }}
+          # Variables de entorno para conectar microservicios
+          BOOKING_URL: ${{ secrets.SVC_BOOKING_URL }}
+          BETTING_URL: ${{ secrets.SVC_BETTING_URL }}
+        with:
+          host: ${{ secrets.GATEWAY_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GHCR_PAT,USERNAME,IMAGE,TAG,BOOKING_URL,BETTING_URL
+          script: |
+            echo $GHCR_PAT | docker login ghcr.io -u $USERNAME --password-stdin
+            docker pull $IMAGE:sha-$TAG
+            docker network create betstay-net || true
+            
+            # 1. Redis (Cache para el Gateway)
+            docker run -d --name redis-gateway \
+              --network betstay-net \
+              --restart unless-stopped \
+              -p 6379:6379 \
+              redis:alpine || true
+            
+            # 2. API Gateway (NestJS)
+            docker stop api-gateway || true
+            docker rm api-gateway || true
+            
+            docker run -d \
+              --name api-gateway \
+              --network betstay-net \
+              --restart always \
+              -p 3000:3000 \
+              -e REDIS_HOST=redis-gateway \
+              -e REDIS_PORT=6379 \
+              -e BOOKING_SERVICE_URL=$BOOKING_URL \
+              -e BETTING_SERVICE_URL=$BETTING_URL \
+              $IMAGE:sha-$TAG
+            
+            docker image prune -f
