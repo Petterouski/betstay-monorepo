@@ -1,0 +1,109 @@
+name: Deploy Betting Domain
+
+on:
+  push:
+    branches: [ "develop" ]
+    paths:
+      - 'apps/betting-engine/**' # Solo se activa si tocas Betting
+      - '.github/workflows/deploy-betting.yml'
+
+env:
+  REGISTRY: ghcr.io
+  # TODO EN MINÚSCULAS: Ajusta si tu usuario/repo es diferente
+  IMAGE_NAME: petterouski/betstay-monorepo/betting-engine
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # Asegúrate de que este Dockerfile exista y funcione para Python
+          file: ./apps/betting-engine/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: QA
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          USERNAME: ${{ github.actor }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG: ${{ github.sha }}
+        with:
+          # AQUI EL CAMBIO IMPORTANTE: Usamos la IP de la máquina de Betting
+          host: ${{ secrets.BETTING_HOST }}
+          username: ${{ secrets.EC2_USER }} # Reusamos el usuario (ec2-user)
+          key: ${{ secrets.EC2_SSH_KEY }}   # Reusamos la llave .pem
+          envs: GHCR_PAT,USERNAME,IMAGE,TAG
+          script: |
+            # 1. Login
+            echo $GHCR_PAT | docker login ghcr.io -u $USERNAME --password-stdin
+            
+            # 2. Pull
+            docker pull $IMAGE:sha-$TAG
+            
+            # 3. Network
+            docker network create betstay-net || true
+            
+            # 4. Postgres DB (Para Betting)
+            # Nota: Postgres usa POSTGRES_PASSWORD en lugar de MYSQL_ROOT_PASSWORD
+            docker run -d \
+              --name postgres-betting \
+              --network betstay-net \
+              --restart unless-stopped \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=postgres \
+              -e POSTGRES_DB=betting_db \
+              -p 5432:5432 \
+              postgres:15-alpine || true
+            
+            # 5. App (Python Betting Engine)
+            docker stop betting-engine || true
+            docker rm betting-engine || true
+            
+            docker run -d \
+              --name betting-engine \
+              --network betstay-net \
+              --restart always \
+              -p 3006:3006 \
+              -e DB_HOST=postgres-betting \
+              -e DB_PORT=5432 \
+              -e DB_USER=postgres \
+              -e DB_PASSWORD=postgres \
+              -e DB_NAME=betting_db \
+              $IMAGE:sha-$TAG
+            
+            # 6. Limpieza
+            docker image prune -f

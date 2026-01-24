@@ -20,6 +20,6 @@ COPY apps/betting-engine/ ./apps/betting-engine
 # Ajustamos el PYTHONPATH para que encuentre el módulo
 ENV PYTHONPATH=/app/apps/betting-engine
 
-EXPOSE 8000
+EXPOSE 3006
 
-CMD ["uvicorn", "betting_engine.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "betting_engine.main:app", "--host", "0.0.0.0", "--port", "3006"]
