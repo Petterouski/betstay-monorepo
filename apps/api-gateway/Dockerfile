@@ -26,30 +26,42 @@
 
 # apps/api-gateway/Dockerfile
 
-# Etapa 1: Build
-FROM node:18-alpine AS builder
+# 1. CAMBIO IMPORTANTE: Usamos Node 20 para evitar errores de compatibilidad
+FROM node:20-alpine AS builder
+
 WORKDIR /app
+
+# Copiamos configs
 COPY package*.json ./
-# Instalamos dependencias (incluyendo devDependencies para compilar)
+
+# Instalamos dependencias
 RUN npm install
+
+# Copiamos todo el código
 COPY . .
-# Construimos
+
+# Construimos la app
 RUN npx nx build api-gateway --configuration=production
 
-# --- SECCIÓN DE DEBUG (SHERLOCK HOLMES) ---
-# Esto imprimirá en el log de GitHub qué carpetas se crearon realmente
-RUN echo "============== CHISMEANDO LA CARPETA DIST ==============" && \
-    ls -R /app/dist && \
-    echo "========================================================"
+# --- SECCIÓN DE DEBUG (SHERLOCK HOLMES MEJORADO) ---
+# 1. Listamos la carpeta raíz para ver si se creó 'dist' u otra cosa
+# 2. Usamos 'find' para localizar el main.js donde sea que esté escondido
+RUN echo "============== ESPIANDO EL SISTEMA DE ARCHIVOS ==============" && \
+    ls -la && \
+    echo "--- Buscando main.js en todo el disco ---" && \
+    find . -name "main.js" -not -path "*/node_modules/*" && \
+    echo "============================================================"
 
 # Etapa 2: Runner
-FROM node:18-alpine
+FROM node:20-alpine
+
 WORKDIR /app
+
 COPY package*.json ./
 RUN npm install --only=production
 
-# --- INTENTO DE COPY (Si falla, miraremos el log de arriba) ---
-# Dejo la ruta original, pero si falla, ya sabremos por qué gracias al 'ls' de arriba
+# --- INTENTO DE COPY ---
+# Mantenemos esta ruta estándar. Si falla, el log de arriba nos dirá la ruta real.
 COPY --from=builder /app/dist/apps/api-gateway ./dist
 
 EXPOSE 3000
