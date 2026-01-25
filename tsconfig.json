@@ -8,6 +8,18 @@
     },
     {
       "path": "./apps/api-gateway"
+    },
+    {
+      "path": "./apps/auth-service-e2e"
+    },
+    {
+      "path": "./apps/auth-service"
+    },
+    {
+      "path": "./apps/hotel-core-e2e"
+    },
+    {
+      "path": "./apps/hotel-core"
     }
   ]
 }

@@ -1,0 +1,39 @@
+// apps/auth-service/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Definimos los roles posibles en el sistema
+enum Role {
+  ADMIN
+  HOTEL_MANAGER
+  CLIENT
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String   // Aquí guardaremos el HASH, nunca texto plano
+  
+  // --- Datos Personales ---
+  firstName String
+  lastName  String
+  cedula    String   @unique // Vital para sistema de apuestas/hotel
+  phone     String?
+  
+  // --- Control de Acceso ---
+  role      Role     @default(CLIENT)
+  isActive  Boolean  @default(true) // Para "soft delete" o baneos
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users") // Buena práctica: que la tabla en Postgres se llame "users" (plural/minúscula)
+}
