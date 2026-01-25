@@ -2,7 +2,7 @@ name: Deploy Booking Domain
 
 on:
   push:
-    branches: [ "develop" ] # Por ahora solo escuchamos develop
+    branches: [ "develop" ] # Ojo: Asegúrate que estás pusheando a develop
     paths:
       - 'apps/booking-engine/**'
       - '.github/workflows/deploy-booking.yml'
@@ -38,6 +38,7 @@ jobs:
             type=ref,event=branch
             type=sha,format=long
 
+      # IMPORTANTE: no-cache para asegurar que tome el nuevo go.mod
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -45,39 +46,77 @@ jobs:
           file: ./apps/booking-engine/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          no-cache: true 
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    environment: QA  # Forzamos que use el entorno QA siempre por ahora
+    environment: QA
 
     steps:
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
-          GHCR_PAT: ${{ secrets.GHCR_PAT }} # RECUERDA CREAR ESTE SECRETO GLOBAL
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
           USERNAME: ${{ github.actor }}
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          TAG: ${{ github.sha }} # Usamos el SHA del commit como tag
+          TAG: ${{ github.sha }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: GHCR_PAT,USERNAME,IMAGE,TAG
           script: |
-            # Login
+            echo "--- INICIANDO DESPLIEGUE ---"
+            
+            # 1. Login
             echo $GHCR_PAT | docker login ghcr.io -u $USERNAME --password-stdin
             
-            # Pull de la imagen especifica de este commit
+            # 2. Pull
             docker pull $IMAGE:sha-$TAG
             
-            # Crear red
+            # 3. Red
             docker network create betstay-net || true
             
-            # DB (Walking Skeleton: simple run)
-            docker run -d --name mysql-booking --network betstay-net --restart unless-stopped -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=booking_db -p 3306:3306 mysql:8.0 || true
+            # 4. LIMPIEZA DE MYSQL (El culpable del error)
+            echo "Eliminando MySQL antiguo..."
+            docker stop mysql-booking || true
+            docker rm mysql-booking || true
             
-            # App
+            # 5. DESPLIEGUE DE POSTGRES (El salvador)
+            echo "Verificando PostgreSQL..."
+            if [ ! "$(docker ps -q -f name=betstay-postgres)" ]; then
+                if [ "$(docker ps -aq -f name=betstay-postgres)" ]; then
+                    docker rm betstay-postgres
+                fi
+                docker run -d \
+                  --name betstay-postgres \
+                  --network betstay-net \
+                  --restart unless-stopped \
+                  -e POSTGRES_USER=postgres \
+                  -e POSTGRES_PASSWORD=postgres_password \
+                  -e POSTGRES_DB=postgres \
+                  -p 5432:5432 \
+                  postgres:15-alpine
+                  
+                sleep 10
+                # Crear la base de datos booking_db
+                docker exec betstay-postgres psql -U postgres -c "CREATE DATABASE booking_db;" || true
+            fi
+            
+            # 6. DESPLIEGUE DE LA APP (Conectada a Postgres)
+            echo "Desplegando Booking Engine..."
             docker stop booking-engine || true
             docker rm booking-engine || true
-            docker run -d --name booking-engine --network betstay-net --restart always -p 3003:3003 -e DB_HOST=mysql-booking -e DB_PORT=3306 -e DB_USER=root -e DB_PASSWORD=root -e DB_NAME=booking_db $IMAGE:sha-$TAG
+            
+            docker run -d \
+              --name booking-engine \
+              --network betstay-net \
+              --restart always \
+              -p 3003:3003 \
+              -e DB_DRIVER=postgres \
+              -e DB_SOURCE="host=betstay-postgres user=postgres password=postgres_password dbname=booking_db port=5432 sslmode=disable" \
+              $IMAGE:sha-$TAG
+              
+            docker image prune -f
+            echo "--- DESPLIEGUE FINALIZADO ---"
