@@ -5,28 +5,31 @@ import { UserResponseDto } from '../application/dto/user-response.dto';
 import { Role } from '../domain/value-objects/roles.enum';
 import { plainToInstance } from 'class-transformer';
 
-
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async findByCedula(cedula: string): Promise<UserResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { cedula },
-    });
-
-    if (!user) {
-      throw new NotFoundException(`Usuario con cédula ${cedula} no encontrado`);
-    }
-
-    return new UserResponseDto(user);
+  // 1. Arregla findByCedula (Línea 21 aprox)
+async findByCedula(cedula: string): Promise<UserResponseDto> {
+  const user = await this.prisma.user.findUnique({ where: { cedula } });
+  
+  if (!user) {
+    throw new NotFoundException(`Usuario con cédula ${cedula} no encontrado`);
   }
+  
+  // USA ESTO:
+  return plainToInstance(UserResponseDto, user);
+}
 
-  // En findById
+// 2. Arregla findById (Línea 26 aprox)
 async findById(id: number): Promise<UserResponseDto> {
   const user = await this.prisma.user.findUnique({ where: { id } });
-  // CAMBIO: Usamos plainToInstance en vez de "new"
-  return plainToInstance(UserResponseDto, user); 
+
+  if (!user) {
+    throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+  }
+
+  return plainToInstance(UserResponseDto, user);
 }
 
 // En findAll
