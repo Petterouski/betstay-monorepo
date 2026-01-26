@@ -1,8 +1,7 @@
-// apps/auth-service/src/app/auth.module.ts
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config'; // <--- Importante
 import { AuthService } from './auth.service';
 import { AuthController } from '../infrastructure/controllers/auth.controller';
 import { JwtStrategy } from '../infrastructure/strategies/jwt.strategy';
@@ -11,6 +10,10 @@ import { UsersService } from './users.service';
 
 @Module({
   imports: [
+    // --- EL FIX: Agrega esto aquí ---
+    ConfigModule, 
+    // --------------------------------
+    
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -24,7 +27,8 @@ import { UsersService } from './users.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, UsersService, JwtStrategy, PrismaService],
+  // Asegúrate de que JwtStrategy esté aquí
+  providers: [AuthService, UsersService, JwtStrategy, PrismaService], 
   exports: [AuthService, JwtStrategy, PassportModule],
 })
 export class AuthModule {}
