@@ -9,6 +9,7 @@ import { plainToInstance } from 'class-transformer';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
+  // --- BUSCAR POR CÉDULA ---
   async findByCedula(cedula: string): Promise<UserResponseDto> {
     const user = await this.prisma.user.findUnique({ where: { cedula } });
     
@@ -19,6 +20,7 @@ export class UsersService {
     return plainToInstance(UserResponseDto, user);
   }
 
+  // --- BUSCAR POR ID ---
   async findById(id: number): Promise<UserResponseDto> {
     const user = await this.prisma.user.findUnique({ where: { id } });
 
@@ -29,7 +31,7 @@ export class UsersService {
     return plainToInstance(UserResponseDto, user);
   }
 
-  // CORRECCIÓN 1: Usar '=' para valores por defecto, no ':'
+  // --- LISTAR TODOS (Corregido el error de sintaxis ':' por '=') ---
   async findAll(page = 1, limit = 10) {
     const skip = (page - 1) * limit;
     
@@ -53,6 +55,8 @@ export class UsersService {
     };
   }
 
+  // --- TUS FUNCIONES DE ADMIN (Corregidas para no dar Error 500) ---
+
   async updateUserRole(id: number, role: Role, requesterId: number) {
     const requester = await this.prisma.user.findUnique({
       where: { id: requesterId },
@@ -67,7 +71,7 @@ export class UsersService {
       data: { role },
     });
 
-    // CORRECCIÓN 2: Usar plainToInstance aquí también
+    // FIX: Usamos plainToInstance en lugar de 'new'
     return plainToInstance(UserResponseDto, user);
   }
 
@@ -85,7 +89,7 @@ export class UsersService {
       data: { isActive: false },
     });
 
-    // CORRECCIÓN 3: Usar plainToInstance aquí también
+    // FIX: Usamos plainToInstance en lugar de 'new'
     return plainToInstance(UserResponseDto, user);
   }
 }
