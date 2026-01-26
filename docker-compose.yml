@@ -101,10 +101,16 @@ services:
     environment:
       - PORT=3001
       - DATABASE_URL=postgresql://postgres:postgres_password@postgres:5432/auth_db
+      - JWT_SECRET=supersecretjwtkeyfordev123456  # NUEVO
+      - NODE_ENV=development                       # NUEVO
     depends_on:
       - postgres
     networks:
       - betstay-net
+      # Agregar volúmenes para hot reload en desarrollo
+    volumes:
+      - ./apps/auth-service:/app/apps/auth-service
+      - /app/apps/auth-service/node_modules
 
   hotel-core: # NestJS (Puerto 3002)
     build:

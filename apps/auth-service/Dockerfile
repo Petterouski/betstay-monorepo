@@ -1,27 +1,31 @@
+# apps/auth-service/Dockerfile
 FROM node:20-alpine
 
-# --- EL FIX: Instalamos OpenSSL manualmente ---
+# 1. Instalar OpenSSL (Necesario para Prisma en Alpine Linux)
 RUN apk add --no-cache openssl
-# ----------------------------------------------
 
 WORKDIR /app
 
-# Copiamos los archivos de definición de dependencias del RAÍZ
+# 2. Copias dependencias y las instalas
 COPY package*.json ./
-
-# Instalamos dependencias
 RUN npm install
 
-# Copiamos todo el monorepo (necesario para que Nx vea el workspace)
+# 3. Copias todo el código
 COPY . .
 
-# --- NUEVO: Generamos el cliente de Prisma para este servicio ---
+# 4. Generas el Cliente de Prisma (CRÍTICO)
+COPY apps/auth-service/prisma ./apps/auth-service/prisma
 RUN npx prisma generate --schema=./apps/auth-service/prisma/schema.prisma
-# ---------------------------------------------------------------
 
-# Exponemos el puerto que definimos en main.ts
+# 5. COMPILAMOS la aplicación (En lugar de nx serve)
+# Esto crea la carpeta 'dist' optimizada
+RUN npx nx build auth-service --configuration=production
+
+# 6. Exponemos puerto
 EXPOSE 3001
 
-# Comando de arranque usando Nx para desarrollo
-# --host=0.0.0.0 es VITAL para que Docker pueda mapear el puerto
-CMD ["npx", "nx", "serve", "auth-service", "--host=0.0.0.0"]
+# 7. COMANDO MAESTRO DE ARRANQUE
+# Explicación:
+# A) "npx prisma migrate deploy": Crea las tablas en la BD remota si no existen.
+# B) "node dist/...": Arranca la versión compilada y ligera (sin Nx overhead).
+CMD sh -c "npx prisma migrate deploy --schema=./apps/auth-service/prisma/schema.prisma && node dist/apps/auth-service/main.js"

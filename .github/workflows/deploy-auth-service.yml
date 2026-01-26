@@ -1,0 +1,99 @@
+name: Deploy Auth Service
+
+on:
+  push:
+    branches: [ "develop" ]
+    paths:
+      - 'apps/auth-service/**'
+      - 'apps/auth-service/prisma/**' # Ojo: También vigilamos cambios en Prisma
+      - '.github/workflows/deploy-auth-service.yml'
+      - 'package.json' # Por si cambian dependencias
+
+env:
+  REGISTRY: ghcr.io
+  # Asegúrate que este sea tu usuario en minúsculas
+  IMAGE_NAME: petterouski/betstay-monorepo/auth-service
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/auth-service/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: QA
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          USERNAME: ${{ github.actor }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG: ${{ github.sha }}
+          # Secretos inyectados
+          DATABASE_URL: ${{ secrets.AUTH_DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        with:
+          host: ${{ secrets.GATEWAY_HOST }} # Desplegamos en la máquina del Gateway
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GHCR_PAT,USERNAME,IMAGE,TAG,DATABASE_URL,JWT_SECRET
+          script: |
+            echo $GHCR_PAT | docker login ghcr.io -u $USERNAME --password-stdin
+            docker pull $IMAGE:sha-$TAG
+            
+            # Crear red si no existe (por seguridad)
+            docker network create betstay-net || true
+            
+            # --- DETENER VERSIÓN ANTERIOR ---
+            echo "Deteniendo contenedor auth-service viejo..."
+            docker stop auth-service || true
+            docker rm auth-service || true
+            
+            # --- ARRANCAR NUEVA VERSIÓN ---
+            echo "Arrancando auth-service..."
+            # Nota: El comando de migraciones corre AUTOMÁTICAMENTE por el CMD del Dockerfile
+            docker run -d \
+              --name auth-service \
+              --network betstay-net \
+              --restart always \
+              -p 3001:3001 \
+              -e DATABASE_URL=$DATABASE_URL \
+              -e JWT_SECRET=$JWT_SECRET \
+              -e NODE_ENV=production \
+              $IMAGE:sha-$TAG
+            
+            # Limpieza de imágenes viejas para ahorrar espacio
+            docker image prune -f
