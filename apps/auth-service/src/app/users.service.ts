@@ -9,55 +9,51 @@ import { plainToInstance } from 'class-transformer';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  // 1. Arregla findByCedula (Línea 21 aprox)
-async findByCedula(cedula: string): Promise<UserResponseDto> {
-  const user = await this.prisma.user.findUnique({ where: { cedula } });
-  
-  if (!user) {
-    throw new NotFoundException(`Usuario con cédula ${cedula} no encontrado`);
-  }
-  
-  // USA ESTO:
-  return plainToInstance(UserResponseDto, user);
-}
-
-// 2. Arregla findById (Línea 26 aprox)
-async findById(id: number): Promise<UserResponseDto> {
-  const user = await this.prisma.user.findUnique({ where: { id } });
-
-  if (!user) {
-    throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+  async findByCedula(cedula: string): Promise<UserResponseDto> {
+    const user = await this.prisma.user.findUnique({ where: { cedula } });
+    
+    if (!user) {
+      throw new NotFoundException(`Usuario con cédula ${cedula} no encontrado`);
+    }
+    
+    return plainToInstance(UserResponseDto, user);
   }
 
-  return plainToInstance(UserResponseDto, user);
-}
+  async findById(id: number): Promise<UserResponseDto> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
 
-// En findAll
-async findAll(page: 1, limit: 10) {
-  const skip = (page - 1) * limit;
-  const [users, total] = await Promise.all([
-    this.prisma.user.findMany({
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-    }),
-    this.prisma.user.count(),
-  ]);
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+    }
 
-  return {
-    // CAMBIO: Usamos plainToInstance aquí también
-    data: users.map(user => plainToInstance(UserResponseDto, user)),
-    meta: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  };
-}
+    return plainToInstance(UserResponseDto, user);
+  }
+
+  // CORRECCIÓN 1: Usar '=' para valores por defecto, no ':'
+  async findAll(page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+    
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count(),
+    ]);
+
+    return {
+      data: users.map(user => plainToInstance(UserResponseDto, user)),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 
   async updateUserRole(id: number, role: Role, requesterId: number) {
-    // Verificar que el solicitante es ADMIN
     const requester = await this.prisma.user.findUnique({
       where: { id: requesterId },
     });
@@ -71,7 +67,8 @@ async findAll(page: 1, limit: 10) {
       data: { role },
     });
 
-    return new UserResponseDto(user);
+    // CORRECCIÓN 2: Usar plainToInstance aquí también
+    return plainToInstance(UserResponseDto, user);
   }
 
   async deactivateUser(id: number, requesterId: number) {
@@ -88,6 +85,7 @@ async findAll(page: 1, limit: 10) {
       data: { isActive: false },
     });
 
-    return new UserResponseDto(user);
+    // CORRECCIÓN 3: Usar plainToInstance aquí también
+    return plainToInstance(UserResponseDto, user);
   }
 }
