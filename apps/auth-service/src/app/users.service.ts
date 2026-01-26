@@ -9,20 +9,27 @@ import { plainToInstance } from 'class-transformer';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  // --- BUSCAR POR CÉDULA ---
+  // ==========================================================
+  // 1. MÉTODOS DE BÚSQUEDA (Públicos o para el propio usuario)
+  // ==========================================================
+
   async findByCedula(cedula: string): Promise<UserResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { cedula } });
+    const user = await this.prisma.user.findUnique({
+      where: { cedula },
+    });
     
     if (!user) {
       throw new NotFoundException(`Usuario con cédula ${cedula} no encontrado`);
     }
     
+    // FIX: Usamos plainToInstance para serializar correctamente
     return plainToInstance(UserResponseDto, user);
   }
 
-  // --- BUSCAR POR ID ---
   async findById(id: number): Promise<UserResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
 
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
@@ -31,7 +38,9 @@ export class UsersService {
     return plainToInstance(UserResponseDto, user);
   }
 
-  // --- LISTAR TODOS (Corregido el error de sintaxis ':' por '=') ---
+  // FIX CRÍTICO: Usamos '=' para valores por defecto, NO ':'
+  // Antes (Error): async findAll(page: 1, limit: 10)
+  // Ahora (Bien):  async findAll(page = 1, limit = 10)
   async findAll(page = 1, limit = 10) {
     const skip = (page - 1) * limit;
     
@@ -55,27 +64,38 @@ export class UsersService {
     };
   }
 
-  // --- TUS FUNCIONES DE ADMIN (Corregidas para no dar Error 500) ---
+  // ==========================================================
+  // 2. MÉTODOS ADMINISTRATIVOS (Requieren validación de rol)
+  // ==========================================================
 
   async updateUserRole(id: number, role: Role, requesterId: number) {
+    // 1. Verificamos quién está pidiendo el cambio
     const requester = await this.prisma.user.findUnique({
       where: { id: requesterId },
     });
 
+    // 2. Si no existe o no es ADMIN, lanzamos error 403 Forbidden
     if (!requester || requester.role !== Role.ADMIN) {
       throw new ForbiddenException('Solo administradores pueden cambiar roles');
     }
 
+    // 3. Verificamos que el usuario objetivo exista antes de actualizar
+    const targetUser = await this.prisma.user.findUnique({ where: { id } });
+    if (!targetUser) {
+        throw new NotFoundException(`Usuario objetivo con ID ${id} no encontrado`);
+    }
+
+    // 4. Actualizamos
     const user = await this.prisma.user.update({
       where: { id },
       data: { role },
     });
 
-    // FIX: Usamos plainToInstance en lugar de 'new'
     return plainToInstance(UserResponseDto, user);
   }
 
   async deactivateUser(id: number, requesterId: number) {
+    // 1. Verificamos quién pide la baja
     const requester = await this.prisma.user.findUnique({
       where: { id: requesterId },
     });
@@ -84,12 +104,18 @@ export class UsersService {
       throw new ForbiddenException('Solo administradores pueden desactivar usuarios');
     }
 
+    // 2. Verificamos objetivo
+    const targetUser = await this.prisma.user.findUnique({ where: { id } });
+    if (!targetUser) {
+        throw new NotFoundException(`Usuario objetivo con ID ${id} no encontrado`);
+    }
+
+    // 3. Actualizamos
     const user = await this.prisma.user.update({
       where: { id },
       data: { isActive: false },
     });
 
-    // FIX: Usamos plainToInstance en lugar de 'new'
     return plainToInstance(UserResponseDto, user);
   }
 }
