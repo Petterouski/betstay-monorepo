@@ -28,4 +28,4 @@ EXPOSE 3001
 # Explicación:
 # A) "npx prisma migrate deploy": Crea las tablas en la BD remota si no existen.
 # B) "node dist/...": Arranca la versión compilada y ligera (sin Nx overhead).
-CMD sh -c "npx prisma migrate deploy --schema=./apps/auth-service/prisma/schema.prisma && node dist/apps/auth-service/main.js"
+CMD sh -c "npx prisma migrate deploy --schema=./apps/auth-service/prisma/schema.prisma && node apps/auth-service/dist/main.js"
