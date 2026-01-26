@@ -95,7 +95,7 @@ export class UsersService {
   }
 
   async deactivateUser(id: number, requesterId: number) {
-    // 1. Verificamos quién pide la baja
+    // 1. Verificamos quién pide la baja .
     const requester = await this.prisma.user.findUnique({
       where: { id: requesterId },
     });
