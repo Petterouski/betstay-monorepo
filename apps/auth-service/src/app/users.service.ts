@@ -22,7 +22,7 @@ export class UsersService {
       throw new NotFoundException(`Usuario con cédula ${cedula} no encontrado`);
     }
     
-    // FIX: Usamos plainToInstance para serializar correctamente
+    // FIX: Usamos plainToInstance para serializar correctamentee
     return plainToInstance(UserResponseDto, user);
   }
 
