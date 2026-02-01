@@ -28,9 +28,9 @@ RUN npx nx run web-client:build:production
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 # Crear usuario para seguridad (Igual que las buenas prácticas)
 RUN addgroup --system --gid 1001 nodejs
