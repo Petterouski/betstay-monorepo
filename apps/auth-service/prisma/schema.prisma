@@ -20,20 +20,21 @@ enum Role {
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
-  password  String   // Aquí guardaremos el HASH, nunca texto plano
-  
-  // --- Datos Personales ---
+  password  String
   firstName String
   lastName  String
-  cedula    String   @unique // Vital para sistema de apuestas/hotel
+  cedula    String   @unique
   phone     String?
-  
-  // --- Control de Acceso ---
   role      Role     @default(CLIENT)
-  isActive  Boolean  @default(true) // Para "soft delete" o baneos
-  
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime? // Soft delete
+  updatedBy Int?      // Usuario que realizó la última modificación
 
-  @@map("users") // Buena práctica: que la tabla en Postgres se llame "users" (plural/minúscula)
+  // Relación opcional para seguimiento de auditoría
+  updater   User?    @relation("UserUpdater", fields: [updatedBy], references: [id])
+
+  // AGREGA ESTA LÍNEA (Lado B: La inversa requerida por Prisma)
+  usersUpdated User[] @relation("UserUpdater")
 }
