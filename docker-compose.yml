@@ -1,54 +1,3 @@
-# version: '3.8'
-
-# services:
-#   # 1. API Gateway (Node/NestJS)
-#   api-gateway:
-#     build:
-#       context: .
-#       dockerfile: ./apps/api-gateway/Dockerfile
-#     ports:
-#       - "3000:3000"
-#     depends_on:
-#       - redis
-#     networks:
-#       - betstay-net
-
-#   # 2. Betting Engine (Python)
-#   betting-engine:
-#     build:
-#       context: .
-#       dockerfile: ./apps/betting-engine/Dockerfile
-#     ports:
-#       - "3006:8000"  # <--- MAGIA: Mapeamos 3006 (Externo) a 8000 (Interno)
-#     volumes:
-#       - ./apps/betting-engine:/app/apps/betting-engine # Hot-Reload
-#     networks:
-#       - betstay-net
-
-#   # 3. Booking Engine (Go)
-#   booking-engine:
-#     build:
-#       context: .
-#       dockerfile: ./apps/booking-engine/Dockerfile
-#     ports:
-#       - "3003:3003"
-#     networks:
-#       - betstay-net
-
-#   # 4. Redis (Base de datos caché)
-#   redis:
-#     image: redis:alpine
-#     ports:
-#       - "6379:6379"
-#     networks:
-#       - betstay-net
-
-# networks:
-#   betstay-net:
-#     driver: bridge
-
-
-#-----------------------------------------------
 version: '3.8'
 
 services:
@@ -149,6 +98,26 @@ services:
       - "3006:3006"
     networks:
       - betstay-net
+
+  # --- NUEVO: FRONTEND ---
+  web-client: # Next.js (Puerto Externo 3012 -> Interno 3000)
+    build:
+      context: .
+      dockerfile: ./apps/web-client/Dockerfile
+      args:
+        # En local, apuntamos al auth-service dentro de la red de docker o localhost
+        # Si usas modo híbrido local, usa la IP de AWS aquí también
+        - NEXT_PUBLIC_API_URL=http://44.197.107.26:3001/api
+    ports:
+      - "3012:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://44.197.107.26:3001/api
+    networks:
+      - betstay-net
+    # Opcional: volúmenes si quieres editar frontend en caliente
+    volumes:
+      - ./apps/web-client:/app/apps/web-client
+      - /app/apps/web-client/node_modules
 
 volumes:
   postgres_data:

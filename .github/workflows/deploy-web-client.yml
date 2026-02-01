@@ -1,0 +1,100 @@
+name: Deploy Web Client
+
+on:
+  push:
+    branches: [ "develop", "main" ] # Agrega main si despliegas a prod
+    paths:
+      - 'apps/web-client/**'
+      - '.github/workflows/deploy-web-client.yml'
+      - 'package.json'
+
+env:
+  REGISTRY: ghcr.io
+  # Asegúrate de usar minúsculas
+  IMAGE_NAME: petterouski/betstay-monorepo/web-client
+  # URL fija del Backend en AWS (Necesaria para el build de Next.js)
+  NEXT_PUBLIC_API_URL: http://44.197.107.26:3001/api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/web-client/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # AQUÍ LA CLAVE: Pasamos la variable al Dockerfile
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: QA
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          USERNAME: ${{ github.actor }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG: ${{ github.sha }}
+          # Re-inyectamos la URL por seguridad en runtime
+          API_URL: ${{ env.NEXT_PUBLIC_API_URL }}
+        with:
+          host: ${{ secrets.GATEWAY_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GHCR_PAT,USERNAME,IMAGE,TAG,API_URL
+          script: |
+            echo $GHCR_PAT | docker login ghcr.io -u $USERNAME --password-stdin
+            docker pull $IMAGE:sha-$TAG
+            
+            # Crear red si no existe
+            docker network create betstay-net || true
+            
+            # --- DETENER VERSIÓN ANTERIOR ---
+            echo "Deteniendo contenedor web-client viejo..."
+            docker stop web-client || true
+            docker rm web-client || true
+            
+            # --- ARRANCAR NUEVA VERSIÓN ---
+            echo "Arrancando web-client..."
+            docker run -d \
+              --name web-client \
+              --network betstay-net \
+              --restart always \
+              -p 3012:3000 \
+              -e NEXT_PUBLIC_API_URL=$API_URL \
+              -e NODE_ENV=production \
+              $IMAGE:sha-$TAG
+            
+            # Limpieza
+            docker image prune -f

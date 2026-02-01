@@ -20,6 +20,9 @@
     },
     {
       "path": "./apps/hotel-core"
+    },
+    {
+      "path": "./apps/web-client"
     }
   ]
 }
