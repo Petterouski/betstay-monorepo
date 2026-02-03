@@ -50,12 +50,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          # Pasamos los argumentos extra aquí
-          args: >
-            -Dsonar.qualitygate.wait=true
-
-  # ... (El resto de tus jobs: build-and-push, deploy... déjalos igual)
 
   build-and-push:
     needs: quality-check
