@@ -8,6 +8,7 @@ on:
       - 'apps/auth-service/prisma/**' # Ojo: También vigilamos cambios en Prisma
       - '.github/workflows/deploy-auth-service.yml'
       - 'package.json' # Por si cambian dependencias
+      - 'nx.json' # Agregado por si cambia la config de Nx
 
 env:
   REGISTRY: ghcr.io
@@ -15,7 +16,40 @@ env:
   IMAGE_NAME: petterouski/betstay-monorepo/auth-service
 
 jobs:
+  quality-check:
+    name: SonarCloud Analysis & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # IMPORTANTE: Necesario para detectar "New Code" en Sonar
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests with Coverage (Auth Service)
+        # Ejecuta los tests de Jest a través de Nx y genera el reporte lcov
+        run: npx nx test auth-service --code-coverage
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Necesario para comentar en PRs
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # El secret que creaste
+        with:
+          # Si el Quality Gate falla, el paso falla y detiene el pipeline
+          args: >
+            -Dsonar.qualitygate.wait=true
+            
   build-and-push:
+    needs: quality-check # BLOQUEO: No corre si falla quality-check
     runs-on: ubuntu-latest
     permissions:
       contents: read
