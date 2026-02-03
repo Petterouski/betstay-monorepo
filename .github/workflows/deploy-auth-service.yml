@@ -36,7 +36,7 @@ jobs:
 
       - name: Run Tests with Coverage (Auth Service)
         # Ejecuta los tests de Jest a través de Nx y genera el reporte lcov
-        run: npx nx test auth-service --code-coverage
+        run: npx nx test auth-service --coverage       # <--- ASÍ ES CORRECTO
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
