@@ -48,7 +48,7 @@ jobs:
           # Si el Quality Gate falla, el paso falla y detiene el pipeline
           args: >
             -Dsonar.qualitygate.wait=true
-            
+
   build-and-push:
     needs: quality-check # BLOQUEO: No corre si falla quality-check
     runs-on: ubuntu-latest
