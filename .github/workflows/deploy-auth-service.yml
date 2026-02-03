@@ -9,6 +9,7 @@ on:
       - '.github/workflows/deploy-auth-service.yml'
       - 'package.json' # Por si cambian dependencias
       - 'nx.json' # Agregado por si cambia la config de Nx
+      - 'sonar-project.properties' # <--- ¡AGREGA ESTO!
 
 env:
   REGISTRY: ghcr.io
