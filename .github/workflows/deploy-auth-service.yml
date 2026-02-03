@@ -51,6 +51,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+          #with:
+          # 👇 AQUÍ ESTÁ LA LÍNEA.
+          # Esto le dice al pipeline: "No esperes el resultado (Aprobado/Reprobado)"
+          # Si la descomentas, el pipeline se bloqueará si no tienes 80% de coverage.
+          #args: >
+          #  -Dsonar.qualitygate.wait=true
+
   build-and-push:
     needs: quality-check
     runs-on: ubuntu-latest
