@@ -39,6 +39,19 @@ jobs:
         # Ejecuta los tests de Jest a través de Nx y genera el reporte lcov
         run: npx nx test auth-service --coverage       # <--- ASÍ ES CORRECTO
 
+        # --- AGREGA ESTO PARA VERIFICAR ---
+      - name: 🕵️ Debug Token Availability
+        env: 
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "❌ ERROR CRÍTICO: El SONAR_TOKEN está vacío. Revisa GitHub Secrets."
+            exit 1
+          else
+            echo "✅ ÉXITO: El SONAR_TOKEN fue encontrado y está listo para usarse."
+          fi
+      # ----------------------------------
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
