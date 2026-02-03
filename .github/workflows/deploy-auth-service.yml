@@ -23,7 +23,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Requerido para Sonar
+          fetch-depth: 0 # Vital para SonarCloud
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,23 +35,27 @@ jobs:
         run: npm install
 
       - name: Run Tests with Coverage (Auth Service)
+        # Ejecuta tests y genera el lcov.info
         run: npx nx test auth-service --coverage
 
-      # Paso de depuración: Lista los archivos para confirmar que lcov.info existe
+      # Paso de depuración: Verifica que el archivo existe antes de escanear
       - name: Debug - Verify Coverage File
-        run: find . -name "lcov.info"
+        run: |
+          echo "Buscando archivo lcov.info..."
+          find . -name "lcov.info"
 
-      # ✅ CAMBIO IMPORTANTE: Usamos la acción oficial moderna (v4)
-      # Esto elimina el warning de deprecación y maneja mejor la autenticación
+      # ✅ ACTUALIZACIÓN: Usamos la versión v6 oficial para quitar warnings
       - name: SonarQube Cloud Scan
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # Los argumentos extra se pasan aquí
+          # Pasamos los argumentos extra aquí
           args: >
             -Dsonar.qualitygate.wait=true
+
+  # ... (El resto de tus jobs: build-and-push, deploy... déjalos igual)
 
   build-and-push:
     needs: quality-check
