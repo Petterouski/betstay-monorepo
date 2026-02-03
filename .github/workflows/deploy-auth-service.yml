@@ -5,15 +5,14 @@ on:
     branches: [ "develop" ]
     paths:
       - 'apps/auth-service/**'
-      - 'apps/auth-service/prisma/**' # Ojo: También vigilamos cambios en Prisma
+      - 'apps/auth-service/prisma/**'
       - '.github/workflows/deploy-auth-service.yml'
-      - 'package.json' # Por si cambian dependencias
-      - 'nx.json' # Agregado por si cambia la config de Nx
-      - 'sonar-project.properties' # <--- ¡AGREGA ESTO!
+      - 'package.json'
+      - 'nx.json'
+      - 'sonar-project.properties'
 
 env:
   REGISTRY: ghcr.io
-  # Asegúrate que este sea tu usuario en minúsculas
   IMAGE_NAME: petterouski/betstay-monorepo/auth-service
 
 jobs:
@@ -24,7 +23,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # IMPORTANTE: Necesario para detectar "New Code" en Sonar
+          fetch-depth: 0 # Requerido para Sonar
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,34 +35,26 @@ jobs:
         run: npm install
 
       - name: Run Tests with Coverage (Auth Service)
-        # Ejecuta los tests de Jest a través de Nx y genera el reporte lcov
-        run: npx nx test auth-service --coverage       # <--- ASÍ ES CORRECTO
+        run: npx nx test auth-service --coverage
 
-        # --- AGREGA ESTO PARA VERIFICAR ---
-      - name: 🕵️ Debug Token Availability
-        env: 
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          if [ -z "$SONAR_TOKEN" ]; then
-            echo "❌ ERROR CRÍTICO: El SONAR_TOKEN está vacío. Revisa GitHub Secrets."
-            exit 1
-          else
-            echo "✅ ÉXITO: El SONAR_TOKEN fue encontrado y está listo para usarse."
-          fi
-      # ----------------------------------
+      # Paso de depuración: Lista los archivos para confirmar que lcov.info existe
+      - name: Debug - Verify Coverage File
+        run: find . -name "lcov.info"
 
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+      # ✅ CAMBIO IMPORTANTE: Usamos la acción oficial moderna (v4)
+      # Esto elimina el warning de deprecación y maneja mejor la autenticación
+      - name: SonarQube Cloud Scan
+        uses: SonarSource/sonarqube-scan-action@v4
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Necesario para comentar en PRs
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # El secret que creaste
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # Si el Quality Gate falla, el paso falla y detiene el pipeline
+          # Los argumentos extra se pasan aquí
           args: >
             -Dsonar.qualitygate.wait=true
 
   build-and-push:
-    needs: quality-check # BLOQUEO: No corre si falla quality-check
+    needs: quality-check
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -101,7 +92,6 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     environment: QA
-
     steps:
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -110,29 +100,22 @@ jobs:
           USERNAME: ${{ github.actor }}
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           TAG: ${{ github.sha }}
-          # Secretos inyectados
           DATABASE_URL: ${{ secrets.AUTH_DATABASE_URL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
         with:
-          host: ${{ secrets.GATEWAY_HOST }} # Desplegamos en la máquina del Gateway
+          host: ${{ secrets.GATEWAY_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: GHCR_PAT,USERNAME,IMAGE,TAG,DATABASE_URL,JWT_SECRET
           script: |
             echo $GHCR_PAT | docker login ghcr.io -u $USERNAME --password-stdin
             docker pull $IMAGE:sha-$TAG
-            
-            # Crear red si no existe (por seguridad)
             docker network create betstay-net || true
             
-            # --- DETENER VERSIÓN ANTERIOR ---
-            echo "Deteniendo contenedor auth-service viejo..."
+            echo "Reiniciando auth-service..."
             docker stop auth-service || true
             docker rm auth-service || true
             
-            # --- ARRANCAR NUEVA VERSIÓN ---
-            echo "Arrancando auth-service..."
-            # Nota: El comando de migraciones corre AUTOMÁTICAMENTE por el CMD del Dockerfile
             docker run -d \
               --name auth-service \
               --network betstay-net \
@@ -143,5 +126,4 @@ jobs:
               -e NODE_ENV=production \
               $IMAGE:sha-$TAG
             
-            # Limpieza de imágenes viejas para ahorrar espacio
             docker image prune -f
